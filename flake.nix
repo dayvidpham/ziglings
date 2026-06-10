@@ -5,14 +5,18 @@
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+
+    zig-overlays.url = "github:mitchellh/zig-overlay";
+    zig-overlays.inputs.nixpkgs.follows = "nixpkgs-stable";
   };
 
   outputs =
     { nixpkgs-stable
     , nixpkgs-unstable
     , flake-utils
+    , zig-overlays
     , ...
-    }@args:
+    }@inputs:
     let
       # ----------------------------------------------------------
       # You configure ...
@@ -28,8 +32,8 @@
       zigAttr = null; # stringly-typed
       zigPackage = pkgs:
         if (pkgs ? zigAttr)
-        then pkgs."${zigAttr}"
-        else pkgs.zig
+        then pkgs.zigpkgs."${zigAttr}"
+        else pkgs.zigpkgs.master
       ;
 
       # Vendor hash for buildGoModule (run `nix build` once with
@@ -83,8 +87,12 @@
       mkOutputs = nixpkgs-channel:
         flake-utils.lib.eachDefaultSystem (system:
           let
+            overlays = [ inputs.zig-overlays.overlays.default ];
             pkgs = import nixpkgs-channel {
-              inherit system;
+              inherit
+                system
+                overlays
+                ;
               config.allowUnfree = true;
             };
 
