@@ -2,19 +2,25 @@
   description = "Minimal Nix flake template to provision a Zig environment";
 
   inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixpkgs-stable.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
 
-    zig-overlays.url = "github:mitchellh/zig-overlay";
-    zig-overlays.inputs.nixpkgs.follows = "nixpkgs-stable";
+    zig.url = "github:silversquirl/zig-flake/compat";
+    zig.inputs.nixpkgs.follows = "nixpkgs";
+    zls.url = "github:zigtools/zls";
+    zls.inputs.nixpkgs.follows = "nixpkgs";
+    zls.inputs.zig-flake.follows = "zig";
   };
 
   outputs =
-    { nixpkgs-stable
+    { nixpkgs
+    , nixpkgs-stable
     , nixpkgs-unstable
     , flake-utils
-    , zig-overlays
+    , zig
+    , zls
     , ...
     }@inputs:
     let
@@ -25,15 +31,15 @@
       version = "0.0.1";
 
       # default channel to source all packages
-      nixpkgs-channel = nixpkgs-stable;
+      nixpkgs-channel = nixpkgs;
 
       # The core language packages (e.g., zig, zig_0_15)
       # Set to null to use the default zig version from nixpkgs
       zigAttr = null; # stringly-typed
       zigPackage = pkgs:
-        if (pkgs ? zigAttr)
-        then pkgs.zigpkgs."${zigAttr}"
-        else pkgs.zigpkgs.master
+        if zigAttr != null
+        then pkgs.${zigAttr}
+        else pkgs.zig_nightly
       ;
 
       # Vendor hash for buildGoModule (run `nix build` once with
@@ -42,7 +48,8 @@
 
       # Extra CLI tools available in the dev shell
       devTools = pkgs: with pkgs; [
-        zls
+        (zigPackage pkgs)
+        zls_nightly
         zig-zlint
       ];
 
@@ -87,7 +94,12 @@
       mkOutputs = nixpkgs-channel:
         flake-utils.lib.eachDefaultSystem (system:
           let
-            overlays = [ inputs.zig-overlays.overlays.default ];
+            overlays = [
+              (prev: final: {
+                zig_nightly = zig.packages.${system}.nightly;
+                zls_nightly = zls.packages.${system}.zls;
+              })
+            ];
             pkgs = import nixpkgs-channel {
               inherit
                 system
